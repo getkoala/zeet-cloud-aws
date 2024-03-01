@@ -1,4 +1,4 @@
-variable "aws_region" {
+variable "region" {
   type = string
 }
 
@@ -6,7 +6,7 @@ variable "aws_account_id" {
   type = string
 }
 
-variable "zeet_cluster_id" {
+variable "cluster_id" {
   type    = string
 }
 
@@ -14,16 +14,11 @@ variable "cluster_name" {
   type    = string
 }
 
-variable "cluster_version" {
-  type    = string
-  default = "1.23"
-}
-
-variable "cluster_domain" {
+variable "cluster_dns" {
   type    = string
 }
 
-variable "zeet_user_id" {
+variable "user_id" {
   type    = string
 }
 
