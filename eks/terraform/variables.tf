@@ -6,10 +6,6 @@ variable "aws_account_id" {
   type = string
 }
 
-variable "role_arn" {
-  type    = string
-}
-
 variable "cluster_id" {
   type    = string
 }
@@ -20,7 +16,7 @@ variable "cluster_name" {
 
 variable "cluster_version" {
   type    = string
-  default = "1.24"
+  default = "1.28" # TODO: anchor integration
 }
 
 variable "cluster_domain" {

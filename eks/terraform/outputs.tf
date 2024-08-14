@@ -41,3 +41,7 @@ output "ssh_private" {
   sensitive = true
   value     = tls_private_key.ssh.private_key_pem
 }
+
+output "cluster_ns_records" {
+  value = aws_route53_zone.zeet.name_servers
+}
