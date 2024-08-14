@@ -1,5 +1,5 @@
 locals {
-  domain = "${var.cluster_dns}.zeet.app"
+  domain = var.cluster_domain
 }
 
 resource "aws_route53_zone" "zeet" {

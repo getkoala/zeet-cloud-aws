@@ -6,6 +6,10 @@ variable "aws_account_id" {
   type = string
 }
 
+variable "role_arn" {
+  type    = string
+}
+
 variable "cluster_id" {
   type    = string
 }
@@ -14,7 +18,12 @@ variable "cluster_name" {
   type    = string
 }
 
-variable "cluster_dns" {
+variable "cluster_version" {
+  type    = string
+  default = "1.24"
+}
+
+variable "cluster_domain" {
   type    = string
 }
 

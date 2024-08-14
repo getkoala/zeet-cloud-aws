@@ -19,12 +19,6 @@ data "aws_eks_cluster_auth" "cluster" {
   name = module.eks.cluster_id
 }
 
-provider "kubernetes" {
-  host                   = data.aws_eks_cluster.cluster.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority.0.data)
-  token                  = data.aws_eks_cluster_auth.cluster.token
-}
-
 resource "aws_eip" "nat" {
   count = var.enable_nat ? 1 : 0
   vpc   = true
@@ -40,7 +34,7 @@ data "aws_ami" "eks_gpu" {
 
   filter {
     name   = "name"
-    values = ["amazon-eks-gpu-node-1.21*"]
+    values = ["amazon-eks-gpu-node-${var.cluster_version}*"]
   }
 }
 
@@ -110,52 +104,12 @@ resource "aws_security_group" "worker_public" {
     ]
   }
 
-  ingress {
-    from_port = 1024
-    to_port   = 65535
-    protocol  = "tcp"
-
-    cidr_blocks = [
-      "0.0.0.0/0"
-    ]
-  }
-
-  ingress {
-    from_port = 1024
-    to_port   = 65535
-    protocol  = "udp"
-
-    cidr_blocks = [
-      "0.0.0.0/0"
-    ]
-  }
-
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-}
-
-locals {
-  autoscaler_common = [
-    {
-      "key"                 = "k8s.io/cluster-autoscaler/enabled"
-      "propagate_at_launch" = "false"
-      "value"               = "true"
-    },
-    {
-      "key"                 = "k8s.io/cluster-autoscaler/${var.cluster_name}"
-      "propagate_at_launch" = "false"
-      "value"               = "true"
-    },
-    {
-      "key"                 = "k8s.io/cluster-autoscaler/node-template/resources/ephemeral-storage"
-      "propagate_at_launch" = "false"
-      "value"               = "100Gi"
-    }
-  ]
 }
 
 resource "tls_private_key" "ssh" {
@@ -170,263 +124,374 @@ resource "aws_key_pair" "ssh" {
 
 
 locals {
-  worker_templates_cpu = [
-    {
-      name          = "c5-4xlarge-dedicated"
-      instance_type = "c5.4xlarge"
+  worker_templates_cpu = { for k, v in {
+    "m5-large-system" : {
+      instance_types = ["m5.large"]
+      desired_size   = 1
 
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=dedicated",
-        "--register-with-taints zeet.co/dedicated=dedicated:NoSchedule"
-      ])
+      labels = {
+        "zeet.co/dedicated" = "system"
+      }
+    }
+    "c5-4xlarge-dedi" : {
+      instance_types = ["c5.4xlarge"]
 
-      tags = concat(local.autoscaler_common, [
+      labels = {
+        "zeet.co/dedicated" = "dedicated"
+      }
+
+      taints = [
         {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "dedicated"
-        },
-      ])
-    },
-    {
-      name          = "c5-2xlarge-dedicated"
-      instance_type = "c5.2xlarge"
-
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=dedicated",
-        "--register-with-taints zeet.co/dedicated=dedicated:NoSchedule"
-      ])
-
-      tags = concat(local.autoscaler_common, [
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "dedicated"
-        },
-      ])
-    },
-    {
-      name          = "c5-xlarge-dedicated"
-      instance_type = "c5.xlarge"
-
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=dedicated",
-        "--register-with-taints zeet.co/dedicated=dedicated:NoSchedule"
-      ])
-
-      tags = concat(local.autoscaler_common, [
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "dedicated"
-        },
-      ])
-    },
-    {
-      name          = "m5-large-dedicated"
-      instance_type = "m5.large"
-
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=dedicated",
-        "--register-with-taints zeet.co/dedicated=dedicated:NoSchedule"
-      ])
-
-      tags = concat(local.autoscaler_common, [
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "dedicated"
-        },
-      ])
-    },
-    {
-      name                    = "c5-xlarge-guaranteed-spot"
-      override_instance_types = ["c5.xlarge"]
-      spot_instance_pools     = 10
-
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=guaranteed,node.kubernetes.io/lifecycle=spot",
-        "--register-with-taints zeet.co/dedicated=guaranteed:NoSchedule"
-      ])
-
-      tags = concat(local.autoscaler_common, [
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "guaranteed"
-        },
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/node.kubernetes.io/lifecycle"
-          "propagate_at_launch" = "false"
-          "value"               = "spot"
+          key    = "zeet.co/dedicated"
+          value  = "dedicated"
+          effect = "NO_SCHEDULE"
         }
-      ])
-    },
-    {
-      name                 = "m5-large-system"
-      instance_type        = "m5.large"
-      asg_desired_capacity = 1
+      ]
+    }
+    "c5-2xlarge-dedi" : {
+      instance_types = ["c5.2xlarge"]
 
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=system",
-      ])
+      labels = {
+        "zeet.co/dedicated" = "dedicated"
+      }
 
-      tags = concat(local.autoscaler_common, [
+      taints = [
         {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "system"
+          key    = "zeet.co/dedicated"
+          value  = "dedicated"
+          effect = "NO_SCHEDULE"
         }
-      ])
-    },
-    {
-      name          = "m5-large-shared"
-      instance_type = "m5.large"
+      ]
+    }
+    "c5-xlarge-dedi" : {
+      instance_types = ["c5.xlarge"]
 
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=shared,node.kubernetes.io/lifecycle=spot",
-        "--register-with-taints zeet.co/dedicated=shared:NoSchedule",
-      ])
+      labels = {
+        "zeet.co/dedicated" = "dedicated"
+      }
 
-      tags = concat(local.autoscaler_common, [
+      taints = [
         {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "shared"
-        },
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/node.kubernetes.io/lifecycle"
-          "propagate_at_launch" = "false"
-          "value"               = "spot"
+          key    = "zeet.co/dedicated"
+          value  = "dedicated"
+          effect = "NO_SCHEDULE"
         }
-      ])
-    },
-    {
-      name          = "m5-large-dedicated-private"
-      instance_type = "m5.large"
+      ]
+    }
+    "m5-large-dedi" : {
+      instance_types = ["m5.large"]
 
-      public_ip = false
-      subnets   = [sort(module.vpc.private_subnets)[0]]
+      labels = {
+        "zeet.co/dedicated" = "dedicated"
+      }
 
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=dedicated,zeet.co/static-ip=true",
-        "--register-with-taints zeet.co/dedicated=dedicated:NoSchedule,zeet.co/static-ip=true:NoSchedule"
-      ])
-
-      tags = concat(local.autoscaler_common, [
+      taints = [
         {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "dedicated"
+          key    = "zeet.co/dedicated"
+          value  = "dedicated"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+    }
+    "c5-xlarge-guran" : {
+      instance_types = ["c5.xlarge"]
+      capacity_type  = "SPOT"
+
+      labels = {
+        "zeet.co/dedicated" = "guaranteed"
+      }
+
+      taints = [
+        {
+          key    = "zeet.co/dedicated"
+          value  = "guaranteed"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+    }
+    "m5-large-shared" : {
+      instance_types = ["m5.large"]
+      capacity_type  = "SPOT"
+
+      labels = {
+        "zeet.co/dedicated" = "shared"
+      }
+
+      taints = [
+        {
+          key    = "zeet.co/dedicated"
+          value  = "shared"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+    }
+    "m5-large-dedi-private" : {
+      instance_types      = ["m5.large"]
+      autoscaling_enabled = var.enable_nat
+
+      subnet_ids = [sort(module.vpc.private_subnets)[0]]
+
+      labels = {
+        "zeet.co/dedicated" = "dedicated"
+        "zeet.co/static-ip" = "true"
+      }
+
+      taints = [
+        {
+          key    = "zeet.co/dedicated"
+          value  = "dedicated"
+          effect = "NO_SCHEDULE"
         },
         {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/static-ip"
-          "propagate_at_launch" = "false"
-          "value"               = "true"
-        },
-      ])
-    },
-    {
-      name                    = "c5-xlarge-guaranteed-private-spot"
-      override_instance_types = ["c5.xlarge"]
-      spot_instance_pools     = 10
+          key    = "zeet.co/static-ip"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+    }
+    "c5-xlarge-guran-priv" : {
+      instance_types      = ["c5.xlarge"]
+      capacity_type       = "SPOT"
+      autoscaling_enabled = var.enable_nat
 
-      public_ip = false
-      subnets   = [sort(module.vpc.private_subnets)[0]]
+      subnet_ids = [sort(module.vpc.private_subnets)[0]]
 
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=guaranteed,zeet.co/static-ip=true,node.kubernetes.io/lifecycle=spot",
-        "--register-with-taints zeet.co/dedicated=guaranteed:NoSchedule,zeet.co/static-ip=true:NoSchedule"
-      ])
+      labels = {
+        "zeet.co/dedicated" = "guaranteed"
+        "zeet.co/static-ip" = "true"
+      }
 
-      tags = concat(local.autoscaler_common, [
+      taints = [
         {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "guaranteed"
+          key    = "zeet.co/dedicated"
+          value  = "guaranteed"
+          effect = "NO_SCHEDULE"
         },
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/node.kubernetes.io/lifecycle"
-          "propagate_at_launch" = "false"
-          "value"               = "spot"
-        },
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/static-ip"
-          "propagate_at_launch" = "false"
-          "value"               = "true"
-        },
-      ])
-    },
-  ]
 
-  worker_templates_gpu = [
-    {
+        {
+          key    = "zeet.co/static-ip"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+    }
+    } : k => merge({
+      name                = k
+      key_name            = aws_key_pair.ssh.key_name
+      desired_size        = 0
+      min_size            = 0
+      max_size            = 20
+      autoscaling_enabled = true
+
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 50
+            volume_type           = "gp2"
+            delete_on_termination = true
+          }
+        }
+      }
+
+      subnet_ids             = [sort(module.vpc.public_subnets)[0]]
+      vpc_security_group_ids = [aws_security_group.worker_public.id]
+    }, v)
+  }
+
+  worker_templates_gpu = var.enable_gpu ? {
+    "g4dn-xlarge-dedi" : merge({
+      key_name     = aws_key_pair.ssh.key_name
+      desired_size = 0
+      min_size     = 0
+      max_size     = 10
+
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 50
+            volume_type           = "gp2"
+            delete_on_termination = true
+          }
+        }
+      }
+
+      subnet_ids             = [sort(module.vpc.public_subnets)[0]]
+      vpc_security_group_ids = [aws_security_group.worker_public.id]
+      }, {
       name          = "g4dn-xlarge-dedicated"
       instance_type = "g4dn.xlarge"
       ami_id        = data.aws_ami.eks_gpu.id
 
-      kubelet_extra_args = join(" ", [
-        "--node-labels=zeet.co/dedicated=dedicated,zeet.co/gpu=\"true\"",
-        "--register-with-taints nvidia.com/gpu=present:NoSchedule",
-      ])
+      subnet_ids = [sort(module.vpc.public_subnets)[0]]
 
-      tags = concat(local.autoscaler_common, [
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/dedicated"
-          "propagate_at_launch" = "false"
-          "value"               = "dedicated"
-        },
-        {
-          "key"                 = "k8s.io/cluster-autoscaler/node-template/label/zeet.co/gpu"
-          "propagate_at_launch" = "false"
-          "value"               = "true"
-        },
-      ]),
-    }
-  ]
+      bootstrap_extra_args = "--kubelet-extra-args '${
+        join(" ", [
+          "--node-labels=zeet.co/dedicated=dedicated,zeet.co/gpu=\"true\"",
+          "--register-with-taints nvidia.com/gpu=present:NoSchedule",
+        ])
+      }'"
 
-  worker_templates = var.enable_gpu ? concat(worker_templates_cpu, worker_templates_gpu) : worker_templates_cpu
+      // not used just for reference
+      labels = {
+        "zeet.co/dedicated" = "dedicated"
+        "zeet.co/gpu"       = "true"
+      }
+      taints = [
+        {
+          key    = "zeet.co/dedicated"
+          value  = "dedicated"
+          effect = "NO_SCHEDULE"
+        },
+
+        {
+          key    = "zeet.co/gpu"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+    })
+  } : {}
 }
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "17.1.0"
+  version = "~> 18.20.0"
 
   cluster_name    = var.cluster_name
-  cluster_version = "1.21"
-  subnets         = flatten([module.vpc.private_subnets, module.vpc.public_subnets])
+  cluster_version = var.cluster_version
+
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = flatten([module.vpc.private_subnets, module.vpc.public_subnets])
 
   tags = {
     ZeetClusterId = var.cluster_id
     ZeetUserId    = var.user_id
   }
 
-  cluster_enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+  cluster_enabled_log_types              = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+  cloudwatch_log_group_retention_in_days = 365
 
-  vpc_id = module.vpc.vpc_id
+  eks_managed_node_group_defaults = {
+    disk_size = 100
+  }
 
-  worker_groups_launch_template = [for template in local.worker_templates :
-    merge({
-      key_name             = aws_key_pair.ssh.key_name
-      asg_desired_capacity = 0
-      asg_min_size         = 0
-      asg_max_size         = 10
+  eks_managed_node_groups = local.worker_templates_cpu
 
-      public_ip                     = true
-      subnets                       = [sort(module.vpc.public_subnets)[0]]
-      additional_security_group_ids = [aws_security_group.worker_public.id]
-    }, template)
-  ]
+  self_managed_node_group_defaults = {
+    disk_size = 100
+  }
+
+  self_managed_node_groups = local.worker_templates_gpu
+
+  node_security_group_additional_rules = {
+    ingress_self_all = {
+      description = "Node to node all ports/protocols"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "ingress"
+      self        = true
+    }
+
+    ingress_cluster_all = {
+      description                   = "Cluster to node all ports/protocols"
+      protocol                      = "-1"
+      from_port                     = 0
+      to_port                       = 0
+      type                          = "ingress"
+      source_cluster_security_group = true
+    }
+  }
 }
 
-data "tls_certificate" "eks" {
-  url = module.eks.cluster_oidc_issuer_url
+locals {
+  eks_managed_node_groups_tags = flatten([
+    for n, i in local.worker_templates_cpu : concat([
+      for k, v in i.labels : {
+        id                  = join("-", [n, k])
+        name                = n
+        key                 = "k8s.io/cluster-autoscaler/node-template/label/${k}"
+        propagate_at_launch = false
+        value               = v
+        }], [{
+        id                  = join("-", [n, "autoscaling-storage"])
+        name                = n
+        key                 = "k8s.io/cluster-autoscaler/node-template/resources/ephemeral-storage"
+        propagate_at_launch = false
+        value               = "50Gi"
+        }, {
+        id                  = join("-", [n, "autoscaling-enabled"])
+        name                = n
+        key                 = "k8s.io/cluster-autoscaler/enabled"
+        propagate_at_launch = true
+        value               = tostring(i.autoscaling_enabled)
+      }]
+    )
+  ])
+
+  self_managed_node_groups_tags = flatten([
+    for n, i in local.worker_templates_gpu : concat([
+      for k, v in i.labels : {
+        id                  = join("-", [n, k])
+        name                = n
+        key                 = "k8s.io/cluster-autoscaler/node-template/label/${k}"
+        propagate_at_launch = false
+        value               = v
+        }], [{
+        id                  = join("-", [n, "autoscaling-enabled"])
+        name                = n
+        key                 = "k8s.io/cluster-autoscaler/enabled"
+        propagate_at_launch = true
+        value               = "true"
+      },
+      {
+        id                  = join("-", [n, "autoscaling-owner"])
+        name                = n
+        key                 = "k8s.io/cluster-autoscaler/${var.cluster_name}"
+        propagate_at_launch = true
+        value               = "true"
+      },
+      {
+        id                  = join("-", [n, "autoscaling-storage"])
+        name                = n
+        key                 = "k8s.io/cluster-autoscaler/node-template/resources/ephemeral-storage"
+        propagate_at_launch = false
+        value               = "50Gi"
+      }]
+    )
+  ])
 }
 
-resource "aws_iam_openid_connect_provider" "eks" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks.certificates.0.sha1_fingerprint]
-  url             = module.eks.cluster_oidc_issuer_url
+resource "aws_autoscaling_group_tag" "eks_managed_node_groups" {
+  for_each = { for t in local.eks_managed_node_groups_tags : t.id => t }
+
+  autoscaling_group_name = module.eks.eks_managed_node_groups[each.value.name].node_group_resources[0].autoscaling_groups[0].name
+
+  tag {
+    key                 = each.value.key
+    value               = each.value.value
+    propagate_at_launch = each.value.propagate_at_launch
+  }
+}
+
+resource "aws_autoscaling_group_tag" "self_managed_node_groups" {
+  for_each = { for t in local.self_managed_node_groups_tags : t.id => t }
+
+  autoscaling_group_name = module.eks.self_managed_node_groups[each.value.name].autoscaling_group_name
+
+  tag {
+    key                 = each.value.key
+    value               = each.value.value
+    propagate_at_launch = each.value.propagate_at_launch
+  }
+}
+
+resource "aws_eks_addon" "eks_addon_csi" {
+  cluster_name = module.eks.cluster_id
+  service_account_role_arn = module.iam_ebs-csi.this_iam_role_arn
+  addon_name   = "aws-ebs-csi-driver"
 }
 
 resource "aws_ecr_repository" "zeet" {
