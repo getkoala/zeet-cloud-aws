@@ -49,10 +49,10 @@ module "vpc" {
   version = "3.0.0"
 
   name                 = var.cluster_name
-  cidr                 = "10.0.0.0/16"
+  cidr                 = var.vpc_cidr
   azs                  = data.aws_availability_zones.available.names
-  public_subnets       = ["10.0.0.0/19", "10.0.32.0/19", "10.0.64.0/19"]
-  private_subnets      = ["10.0.96.0/19", "10.0.128.0/19", "10.0.160.0/19"]
+  public_subnets       = var.vpc_public_subnets
+  private_subnets      = var.vpc_private_subnets
   enable_dns_hostnames = true
 
   enable_nat_gateway  = var.enable_nat
@@ -495,9 +495,9 @@ resource "aws_autoscaling_group_tag" "self_managed_node_groups" {
 }
 
 resource "aws_eks_addon" "eks_addon_csi" {
-  cluster_name = module.eks.cluster_id
+  cluster_name             = module.eks.cluster_id
   service_account_role_arn = module.iam_ebs-csi.this_iam_role_arn
-  addon_name   = "aws-ebs-csi-driver"
+  addon_name               = "aws-ebs-csi-driver"
 }
 
 resource "aws_ecr_repository" "zeet" {
