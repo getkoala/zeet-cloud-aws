@@ -281,6 +281,32 @@ locals {
         }
       ]
     }
+    "c5-2xlarge-guran-priv" : {
+      instance_types      = ["c5.2xlarge"]
+      capacity_type       = "SPOT"
+      autoscaling_enabled = var.enable_nat
+
+      subnet_ids = [sort(module.vpc.private_subnets)[0]]
+
+      labels = {
+        "zeet.co/dedicated" = "guaranteed"
+        "zeet.co/static-ip" = "true"
+      }
+
+      taints = [
+        {
+          key    = "zeet.co/dedicated"
+          value  = "guaranteed"
+          effect = "NO_SCHEDULE"
+        },
+
+        {
+          key    = "zeet.co/static-ip"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+    }
     } : k => merge({
       name                = k
       key_name            = aws_key_pair.ssh.key_name
