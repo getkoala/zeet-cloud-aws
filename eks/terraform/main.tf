@@ -61,16 +61,22 @@ module "vpc" {
   external_nat_ip_ids = var.enable_nat ? aws_eip.nat[*].id : []
 
   public_subnet_tags = {
+    VantaOwner                                  = "matt@koala.live"
+    VantaDescription											      = "koala vpc for koala owned resources"
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
     "kubernetes.io/role/elb"                    = "1"
   }
 
   private_subnet_tags = {
+    VantaOwner                                  = "matt@koala.live"
+    VantaDescription											      = "koala vpc for koala owned resources"
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
     "kubernetes.io/role/internal-elb"           = "1"
   }
 
   tags = {
+    VantaOwner                                  = "matt@koala.live"
+    VantaDescription											      = "koala vpc for koala owned resources"
     ZeetClusterId = var.cluster_id
     ZeetUserId    = var.user_id
   }
