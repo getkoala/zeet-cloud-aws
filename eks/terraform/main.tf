@@ -318,7 +318,7 @@ locals {
       key_name            = aws_key_pair.ssh.key_name
       desired_size        = 0
       min_size            = 0
-      max_size            = 20
+      max_size            = 80
       autoscaling_enabled = true
 
       block_device_mappings = {
