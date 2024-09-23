@@ -28,10 +28,10 @@ data "aws_eks_cluster_auth" "cluster" {
 resource "aws_eip" "nat" {
   count = var.enable_nat ? 1 : 0
   vpc   = true
-  name  = "${var.cluster_name}-${var.region}"
   tags  = {
-    ZeetClusterId = var.cluster_id
-    ZeetUserId    = var.user_id
+    Name                                        = "${var.cluster_name}-${var.region}"
+    ZeetClusterId                               = var.cluster_id
+    ZeetUserId                                  = var.user_id
     VantaOwner                                  = "matt@koala.live"
     VantaDescription											      = "koala vpc for koala owned resources"
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
