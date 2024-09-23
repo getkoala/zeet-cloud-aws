@@ -465,6 +465,12 @@ locals {
         key                 = "k8s.io/cluster-autoscaler/enabled"
         propagate_at_launch = true
         value               = tostring(i.autoscaling_enabled)
+      }, {
+        id                  = join("-", [n, "vanta-owner"])
+        name                = n
+        key                 = "VantaOwner"
+        propagate_at_launch = true
+        value               = "matt@getkoala.com"
       }]
     )
   ])
