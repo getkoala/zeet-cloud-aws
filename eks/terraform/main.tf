@@ -72,7 +72,7 @@ module "vpc" {
     VantaOwner                                  = "matt@koala.live"
     VantaDescription											      = "koala vpc for koala owned resources"
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-    "kubernetes.io/role/internal-elb"           = "1"
+    "kubernetes.io/role/elb"                    = "1"
     "kubernetes.io/role/internal-elb"           = "1"
   }
 
@@ -82,7 +82,7 @@ module "vpc" {
     ZeetClusterId                               = var.cluster_id
     ZeetUserId                                  = var.user_id
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-    "kubernetes.io/role/internal-elb"           = "1"
+    "kubernetes.io/role/elb"                    = "1"
     "kubernetes.io/role/internal-elb"           = "1"
   }
 }
